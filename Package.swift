@@ -16,7 +16,7 @@ let package = Package(
         .binaryTarget(
             name: "KarteCrashReporter",
             url: "https://sdk.karte.io/ios/swiftpm/KarteCrashReporter-1.12.0/KarteCrashReporter.xcframework.zip",
-            checksum: "e6a79c85bd7337fd938cafa56b2d8d02ab8a31bb59eed92dd294295bc495522e"
+            checksum: "06d8416980100df45aaa48964e37b1d455b002bbc965151b2c64889d7cc4ece7"
         ),
     ]
 )
