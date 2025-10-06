@@ -23,4 +23,6 @@ Pod::Spec.new do |spec|
   # Keep vendored_frameworks name CrashReporter.xcframework as the binary was built with that name, not KartePLCrashReporter
   spec.source       = { :git => "https://github.com/plaidev/KartePLCrashReporter.git", :tag => "#{spec.version}" }
   spec.vendored_frameworks = "CrashReporter.xcframework"
+  spec.libraries = 'c++'
+  spec.pod_target_xcconfig = { 'OTHER_LDFLAGS' => '-lc++' }
 end
