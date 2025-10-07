@@ -1,5 +1,11 @@
 # PLCrashReporter Change Log
 
+## Version 1.13.1(forked)
+
+* **[Fix]** Fixed SPM tool version to use ios15, macos13 and tvos15
+
+___
+
 ## Version 1.13.0(forked)
 
 * **[Improvement]** Update target iOS and tvOS version to 15.0.
