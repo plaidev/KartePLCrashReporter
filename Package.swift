@@ -1,4 +1,4 @@
-// swift-tools-version:5.7
+// swift-tools-version:5.3
 
 import PackageDescription
 
@@ -15,8 +15,8 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "KarteCrashReporter",
-            url: "https://sdk.karte.io/ios/swiftpm/KarteCrashReporter-1.13.0/KarteCrashReporter.xcframework.zip",
-            checksum: "3c4e9efed7ba203700d1441e97aec56f8c7ddb34ecb529fad9ea4f591b2bb51a"
+            url: "https://sdk.karte.io/ios/swiftpm/KarteCrashReporter-1.13.1/KarteCrashReporter.xcframework.zip",
+            checksum: "743ba236d4e51b0eb368bb9f25187a714b27d73f8d39d5afef576dabb1d6bd42"
         ),
     ]
 )
