@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       deployment_target:
-        description: 'Deployment destination (evaluation skips Package.swift push)'
+        description: 'Deployment destination'
         type: choice
         options:
           - evaluation
@@ -11,7 +11,7 @@ on:
         default: evaluation
 jobs:
   build:
-    if: github.ref == 'refs/heads/master' && (inputs.deployment_target == 'evaluation' || inputs.deployment_target == 'production')
+    if: github.ref_type == 'branch' && (inputs.deployment_target == 'evaluation' || (inputs.deployment_target == 'production' && github.ref == 'refs/heads/master'))
     runs-on: macos-15
     timeout-minutes: 30
     permissions:
@@ -86,43 +86,40 @@ jobs:
             --acl public-read \
             --if-none-match "*"
       - name: Replace Package.swift
-        if: inputs.deployment_target == 'production'
         env:
+          DOWNLOAD_HOST: ${{ inputs.deployment_target == 'production' && 'sdk.karte.io' || 'evaluation-native-sdk.s3.ap-northeast-1.amazonaws.com' }}
           VERSION: ${{ steps.release-version.outputs.VERSION }}
           ARTIFACT_ID: ${{ steps.generate-artifact-id.outputs.ARTIFACT_ID }}
         run: |
           rm Package.swift
           cp .KarteTemplate-Package.swift Package.swift
 
-          url="https:\/\/sdk.karte.io\/ios\/swiftpm\/KarteCrashReporter-${VERSION}\/KarteCrashReporter-${ARTIFACT_ID}.xcframework.zip"
+          url="https:\/\/${DOWNLOAD_HOST}\/ios\/swiftpm\/KarteCrashReporter-${VERSION}\/KarteCrashReporter-${ARTIFACT_ID}.xcframework.zip"
           checksum=$(swift package compute-checksum ./KarteCrashReporter.xcframework.zip)
 
           sed -i "" "s/<__URL__>/url: \"${url}\"/g" "./Package.swift"
           sed -i "" "s/<__CHECKSUM__>/checksum: \"${checksum}\"/g" "./Package.swift"
       - name: Update Swift-PM manifest file
-        if: inputs.deployment_target == 'production'
         run: |
           git add Package.swift
           git add CrashReporter.xcframework
           git add KarteCrashReporter.xcframework
           git commit -m "[skip ci] Update xcframework"
       - name: Create tag
+        if: inputs.deployment_target == 'production'
         env:
-          TARGET_TAG: ${{ inputs.deployment_target == 'production' && steps.release-version.outputs.VERSION || format('evaluation/deploy-{0}-{1}', github.run_id, github.run_attempt) }}
-        run: git tag "$TARGET_TAG"
+          VERSION: ${{ steps.release-version.outputs.VERSION }}
+        run: git tag "$VERSION"
       - name: Push changes
+        if: inputs.deployment_target == 'production' || github.ref != 'refs/heads/master'
         env:
           GH_TOKEN: ${{ github.token }}
           DEPLOYMENT_TARGET: ${{ inputs.deployment_target }}
-          TARGET_BRANCH: ${{ inputs.deployment_target == 'production' && 'master' || format('evaluation/deploy-{0}-{1}', github.run_id, github.run_attempt) }}
-          TARGET_TAG: ${{ inputs.deployment_target == 'production' && steps.release-version.outputs.VERSION || format('evaluation/deploy-{0}-{1}', github.run_id, github.run_attempt) }}
+          VERSION: ${{ steps.release-version.outputs.VERSION }}
         run: |
           gh auth setup-git --hostname github.com
-          git push --atomic origin \
-            "HEAD:refs/heads/$TARGET_BRANCH" \
-            "refs/tags/$TARGET_TAG:refs/tags/$TARGET_TAG"
-          if [ "$DEPLOYMENT_TARGET" = 'evaluation' ]; then
-            git push --atomic origin \
-              ":refs/heads/$TARGET_BRANCH" \
-              ":refs/tags/$TARGET_TAG"
+          refs=("HEAD:$GITHUB_REF")
+          if [ "$DEPLOYMENT_TARGET" = 'production' ]; then
+            refs+=("refs/tags/$VERSION:refs/tags/$VERSION")
           fi
+          git push --atomic origin "${refs[@]}"
