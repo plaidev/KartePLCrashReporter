@@ -106,14 +106,23 @@ jobs:
           git add CrashReporter.xcframework
           git add KarteCrashReporter.xcframework
           git commit -m "[skip ci] Update xcframework"
+      - name: Create tag
+        env:
+          TARGET_TAG: ${{ inputs.deployment_target == 'production' && steps.release-version.outputs.VERSION || format('evaluation/deploy-{0}-{1}', github.run_id, github.run_attempt) }}
+        run: git tag "$TARGET_TAG"
       - name: Push changes
         env:
           GH_TOKEN: ${{ github.token }}
           DEPLOYMENT_TARGET: ${{ inputs.deployment_target }}
           TARGET_BRANCH: ${{ inputs.deployment_target == 'production' && 'master' || format('evaluation/deploy-{0}-{1}', github.run_id, github.run_attempt) }}
+          TARGET_TAG: ${{ inputs.deployment_target == 'production' && steps.release-version.outputs.VERSION || format('evaluation/deploy-{0}-{1}', github.run_id, github.run_attempt) }}
         run: |
           gh auth setup-git --hostname github.com
-          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
+          git push --atomic origin \
+            "HEAD:refs/heads/$TARGET_BRANCH" \
+            "refs/tags/$TARGET_TAG:refs/tags/$TARGET_TAG"
           if [ "$DEPLOYMENT_TARGET" = 'evaluation' ]; then
-            git push origin --delete "$TARGET_BRANCH"
+            git push --atomic origin \
+              ":refs/heads/$TARGET_BRANCH" \
+              ":refs/tags/$TARGET_TAG"
           fi
