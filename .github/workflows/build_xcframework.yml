@@ -1,11 +1,18 @@
 name: "Create XCFramework and Deploy Swift-PM"
 on:
-  pull_request:
-   branches:
-    - master
+  workflow_dispatch:
+    inputs:
+      deployment_target:
+        description: 'Deployment destination (evaluation skips Package.swift push)'
+        type: choice
+        options:
+          - evaluation
+          - production
+        default: evaluation
 
 jobs:
   build:
+    if: github.ref == 'refs/heads/master' && (inputs.deployment_target == 'evaluation' || inputs.deployment_target == 'production')
     runs-on: macos-15
     permissions:
       contents: write
@@ -13,15 +20,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
       - name: Configure Git
         run: |
           git config user.email "git@users.noreply.github.com"
           git config user.name "github actions"
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        env:
+          AWS_ROLE_ARN: ${{ inputs.deployment_target == 'production' && 'arn:aws:iam::161473449094:role/ProductionKarteCrashReporterDeployRole' || 'arn:aws:iam::307291217331:role/EvaluationKarteCrashReporterDeployRole' }}
         with:
           aws-region: ap-northeast-1
-          role-to-assume: arn:aws:iam::161473449094:role/ProductionNativeSdkRole
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
           role-session-name: MySessionName
       - name: Select Xcode version
         run: sudo xcode-select -s '/Applications/Xcode_16.4.app'
@@ -32,21 +43,21 @@ jobs:
           version=`fastlane run version_get_podspec path:"./KarteCrashReporter.podspec" | grep -o -E "([0-9]+\.){1}[0-9]+(\.[0-9]+)?" | head -n1`
           echo "VERSION=${version}" >> "$GITHUB_OUTPUT"
       - name: Check if it has already been released
+        if: inputs.deployment_target == 'production'
         env:
           VERSION: ${{ steps.release-version.outputs.VERSION }}
         run: |
-          git fetch
-          if [ `git tag | grep "${VERSION}"` ]; then
+          git fetch --tags
+          if git rev-parse --verify --quiet "refs/tags/${VERSION}" > /dev/null; then
             echo "Please bump up version number!!"
             exit 1
           fi
+      - name: Generate Swift-PM artifact ID
+        id: generate-artifact-id
+        run: |
+          echo "ARTIFACT_ID=$(printf '%x' "$(date -u +%s)")" >> "$GITHUB_OUTPUT"
       - name: Create XCFramework
         run: xcodebuild -configuration Release -target 'CrashReporter'
-      - name: Checkout Head Branch
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          ref: ${{github.event.pull_request.head.ref}}
-          clean: 'false'
       - name: Replace XCFramework
         run: |
           rm -rf CrashReporter.xcframework
@@ -57,24 +68,35 @@ jobs:
           zip -r KarteCrashReporter.xcframework.zip KarteCrashReporter.xcframework
       - name: Upload XCFramework to aws s3
         env:
+          S3_BUCKET: ${{ inputs.deployment_target == 'production' && 'production-native-sdk' || 'evaluation-native-sdk' }}
           VERSION: ${{ steps.release-version.outputs.VERSION }}
+          ARTIFACT_ID: ${{ steps.generate-artifact-id.outputs.ARTIFACT_ID }}
         run: |
+          set -euo pipefail
           aws sts get-caller-identity
-          aws s3 ls s3://production-native-sdk/
-          aws s3 cp ./KarteCrashReporter.xcframework.zip s3://production-native-sdk/ios/swiftpm/KarteCrashReporter-${VERSION}/ --acl public-read
+          KEY="ios/swiftpm/KarteCrashReporter-${VERSION}/KarteCrashReporter-${ARTIFACT_ID}.xcframework.zip"
+          aws s3api put-object \
+            --bucket "$S3_BUCKET" \
+            --key "$KEY" \
+            --body ./KarteCrashReporter.xcframework.zip \
+            --acl public-read \
+            --if-none-match "*"
       - name: Replace Package.swift
+        if: inputs.deployment_target == 'production'
         env:
           VERSION: ${{ steps.release-version.outputs.VERSION }}
+          ARTIFACT_ID: ${{ steps.generate-artifact-id.outputs.ARTIFACT_ID }}
         run: |
           rm Package.swift
           cp .KarteTemplate-Package.swift Package.swift
 
-          url="https:\/\/sdk.karte.io\/ios\/swiftpm\/KarteCrashReporter-${VERSION}\/KarteCrashReporter.xcframework.zip"
+          url="https:\/\/sdk.karte.io\/ios\/swiftpm\/KarteCrashReporter-${VERSION}\/KarteCrashReporter-${ARTIFACT_ID}.xcframework.zip"
           checksum=$(swift package compute-checksum ./KarteCrashReporter.xcframework.zip)
 
           sed -i "" "s/<__URL__>/url: \"${url}\"/g" "./Package.swift"
           sed -i "" "s/<__CHECKSUM__>/checksum: \"${checksum}\"/g" "./Package.swift"
       - name: Update Swift-PM manifest file
+        if: inputs.deployment_target == 'production'
         run: |
           git add Package.swift
           git add CrashReporter.xcframework
