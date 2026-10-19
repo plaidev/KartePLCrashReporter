@@ -87,7 +87,7 @@ jobs:
             --if-none-match "*"
       - name: Replace Package.swift
         env:
-          DOWNLOAD_HOST: ${{ inputs.deployment_target == 'production' && 'sdk.karte.io' || 'evaluation-native-sdk.s3.ap-northeast-1.amazonaws.com' }}
+          DOWNLOAD_HOST: ${{ inputs.deployment_target == 'production' && 'sdk.karte.io' || 'sdk.dev-karte.com' }}
           VERSION: ${{ steps.release-version.outputs.VERSION }}
           ARTIFACT_ID: ${{ steps.generate-artifact-id.outputs.ARTIFACT_ID }}
         run: |
