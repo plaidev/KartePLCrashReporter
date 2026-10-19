@@ -118,8 +118,7 @@ jobs:
           VERSION: ${{ steps.release-version.outputs.VERSION }}
         run: |
           gh auth setup-git --hostname github.com
-          refs=("HEAD:$GITHUB_REF")
+          git push origin "HEAD:$GITHUB_REF"
           if [ "$DEPLOYMENT_TARGET" = 'production' ]; then
-            refs+=("refs/tags/$VERSION:refs/tags/$VERSION")
+            git push origin "refs/tags/$VERSION"
           fi
-          git push --atomic origin "${refs[@]}"
