@@ -101,11 +101,19 @@ jobs:
           sed -i "" "s/<__CHECKSUM__>/checksum: \"${checksum}\"/g" "./Package.swift"
       - name: Update Swift-PM manifest file
         if: inputs.deployment_target == 'production'
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           git add Package.swift
           git add CrashReporter.xcframework
           git add KarteCrashReporter.xcframework
           git commit -m "[skip ci] Update xcframework"
-          git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')" push
+      - name: Push changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOYMENT_TARGET: ${{ inputs.deployment_target }}
+          TARGET_BRANCH: ${{ inputs.deployment_target == 'production' && 'master' || format('evaluation/deploy-{0}-{1}', github.run_id, github.run_attempt) }}
+        run: |
+          gh auth setup-git --hostname github.com
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
+          if [ "$DEPLOYMENT_TARGET" = 'evaluation' ]; then
+            git push origin --delete "$TARGET_BRANCH"
+          fi
