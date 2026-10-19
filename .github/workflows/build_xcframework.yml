@@ -40,11 +40,12 @@ jobs:
       - name: Get Release Version
         id: release-version
         run: |
-          ruby <<'RUBY' >> "$GITHUB_OUTPUT"
-          version = File.read('KarteCrashReporter.podspec')[/^\s*spec\.version\s*=\s*["']([^"']+)["']/, 1]
-          abort 'Unable to read release version from podspec' unless version
-          puts "VERSION=#{version}"
-          RUBY
+          version=$(sed -nE "s/^[[:space:]]*spec\.version[[:space:]]*=[[:space:]]*[\"']([^\"']+)[\"'].*/\1/p" KarteCrashReporter.podspec)
+          if [ -z "$version" ]; then
+            echo "Unable to read release version from podspec" >&2
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_OUTPUT"
       - name: Check if it has already been released
         if: inputs.deployment_target == 'production'
         env:
